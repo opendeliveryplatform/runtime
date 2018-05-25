@@ -1,12 +1,21 @@
 ---
 - hosts: openldap-servers
   become: True
+
+  vars:
+    server_uri: "ldapi:///"
+
   pre_tasks:
   - name: install dependency
     apt:
       name: python-jmespath
     become: True
-  
+
+  - name: check for default settings
+    stat:
+      path: "/etc/default/slapd"
+    register: st_slapd
+
   roles:
   - role: local.openldap
     openldap_schemas:
@@ -17,15 +26,19 @@
       - rfc2739
     openldap_bases:
       - rootdn: cn=admin
-        suffix: dc=org,dc=opendp
+        suffix: dc=opendp,dc=org
         indexes:
           - [ "uid,uidNumber,gidNumber,memberUID", "pres,eq" ]
+          
   post_tasks:
   - name: Make sure we have a parent entry for users
     ldap_entry:
       dn: "{{ item.dn }}"
       objectClass: "{{ item.objectclass }}"
       attributes: "{{ item.attributes }}"
+      bind_dn: cn=admin,dc=opendp,dc=org
+      bind_pw: secret
+      server_uri: "{{server_uri}}"
     with_items:
     - { dn: "dc=opendp,dc=org",
         objectclass: ["dcObject", "organization"],
@@ -53,7 +66,8 @@
           uid: alice,
           cn: "alice springs",
           sn: "springs",
-          userPassword: "alice" 
+          mail: "alice.springs@opendp.local",
+          userPassword: '{SSHA}CEO5svZIGFMKGrAPsXnWwK418E3ZZWMcwFNZmg==' # alice
         }
       }
     - { 
@@ -63,7 +77,8 @@
           uid: bob,
           cn: "bob andrews",
           sn: "andrews", 
-          userPassword: "{{ 'bob' | password_hash('sha512')}}" 
+          mail: "bob.andrews@opendp.local",
+          userPassword: "{SSHA}p9AEzCP/uCHV3Szpw/Hhbq9CRV18CVxL" # bob 
         }
       }
     - { 
@@ -73,7 +88,8 @@
           uid: nick,
           cn: "nick elback",
           sn: "elback", 
-          userPassword: "{{ 'nick' | password_hash('sha512')}}" 
+          mail: "nick.elback@opendp.local",
+          userPassword: "{SSHA}DpJ+anPij+H/6PWEaLsYMgvmo5n2umPA" # nick
         }
       }
     - { 
@@ -108,60 +124,9 @@
       name: "member",
       ldap_values: ["uid=bob,ou=users,dc=opendp,dc=org", "uid=alice,ou=users,dc=opendp,dc=org"]
     }
-    - {
-      dn: "uid=alice,ou=users,dc=opendp,dc=org",
-      name: "userPassword",
-      ldap_values: "alice" 
-    }
-    tags: post_task
-
-  - name: ensure directory exists
-    file:
-      path: "/etc/ldap/ssl"
-      owner: openldap
-      group: openldap
-      mode: 0700
-      state: directory
-    become: True
-    tags: post_task
-
-  - name: copy cert / key material
-    copy:
-      src: "/home/vagrant/pki/{{item.src}}"
-      dest: "/etc/ldap/ssl/{{item.dest | default(item.src)}}"
-      owner: openldap
-      group: openldap
-    with_items:
-      - {src: "ldap.service.consul.pem", dest: ldap.crt}
-      - {src: "ldap.service.consul-key.pem", dest: ldap.key}
-      - {src: "ca.pem", dest: "ca.crt"}
     tags: post_task
 
   - include: openldap_tls.yml
     tags: tls
     
 
-#  - name: config global settings - key file
-#    ldap_attr:
-#      dn: "{{ item.dn }}"
-#      name: "{{item.name}}"
-#      values: "{{item.ldap_values}}"
-#      state: "{{ item.state }}"
-#    with_items:
-#      - { dn: "cn=config", name: olcTLSCertificateKeyFile, ldap_values: "/etc/ldap/ssl/ldap.key", state: exact }
-##      - { dn: "olcDatabase={1}mdb,cn=config", name: "olcSecurity", ldap_values: ["tls=1"], state: exact } # require tls
-#    tags: post_task,tls,tls_key
-#
-#  - name: config global settings - ca cert
-#    ldap_attr:
-#      dn: "{{ item.dn }}"
-#      name: "{{item.name}}"
-#      values: "{{item.ldap_values}}"
-#      state: "{{ item.state }}"
-#    with_items:
-#      - { dn: "cn=config", name: olcTLSCACertificateFile, ldap_values: "/etc/ldap/ssl/ca.crt", state: exact }
-##      - { dn: "olcDatabase={1}mdb,cn=config", name: "olcSecurity", ldap_values: ["tls=1"], state: exact } # require tls
-#    tags: post_task,tls
-#  
-#
-#

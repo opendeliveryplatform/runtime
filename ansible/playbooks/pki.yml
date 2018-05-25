@@ -53,8 +53,29 @@
         - "ldap0.service.consul"
         - "ldap1.service.consul"
         altips: "{{ groups['openldap-servers'] | map('extract', hostvars, 'ansible_host')|list}}"
+      - cname: keycloak.service.consul
+        sans:
+        - "*.keycloak.service.consul"
+        altips: "{{ groups['keycloak-servers'] | map('extract', hostvars, 'ansible_host')|list}}"
     pki_clients:
     - consul-worker1
     - consul-worker2
     - consul-worker3
     - consul-controller
+  tasks:
+  - name: install openjdk
+    apt:
+      name: openjdk-8-jdk
+    tags: create_truststore
+    become: True
+  - name: import certificate
+    java_cert:
+      cert_path: "{{item.cert_path}}"
+      cert_alias: "{{item.cert_alias}}"
+      keystore_path: /home/vagrant/pki/truststore.jks
+      keystore_create: True
+      keystore_pass: changeit
+    with_items:
+    - { cert_path: /home/vagrant/pki/ca.pem, cert_alias: 'default'}
+    - { cert_path: /home/vagrant/pki/ldap.service.consul.pem, cert_alias: 'ldap'}
+    tags: create_truststore

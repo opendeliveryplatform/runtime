@@ -4,6 +4,30 @@
     name: slapd
   state: present
 
+
+- name: ensure ldap dev modules installed
+  apt:
+    name: "{{item}}"
+  with_items:
+    - libsasl2-dev 
+    - python-dev 
+    - libldap2-dev 
+    - libssl-dev
+    - python-pip
+
+- name: ensure python ldap module installed
+  pip:
+    name: "{{ item }}"
+  with_items:
+  - python-ldap
+  become: True
+
+- name: ensure jmespath module installed
+  pip:
+    name: "jmespath"
+    version: 0.9.3
+  become: True
+
 - name: datadir
   file:
     state: directory
@@ -66,37 +90,6 @@
 #    regexp: '^SLAPD_SERVICES='
 #  notify: restart slapd
 
-- name: test for slapd backends modules (for slapd.conf.j2)
-  stat:
-    path: '{{ openldap_modsdir }}/back_{{ item }}.la'
-  with_items: '{{ openldap_bases.database | default([]) | union([openldap_db_engine]) | unique }}'
-  register: openldap_dbmodules_stat
-  failed_when: False
-  when: 'openldap_modsdir != ""'
-  tags: config, openldap
-
-- set_fact:
-    openldap_dbmodules: "{{ openldap_dbmodules_stat | json_query(\"results[?stat.exists].item\") }}"
-  tags: tst
-
-- debug:
-    var: openldap_dbmodules_stat
-  tags: tst
-
-- name: ensure ldap dev modules installed
-  apt:
-    name: "{{item}}"
-  with_items:
-    - libsasl2-dev 
-    - python-dev 
-    - libldap2-dev 
-    - libssl-dev
-    - python-pip
-- name: ensure ldap module installed
-  pip:
-    name: python-ldap
-  become: True
-
 - name: start slapd
   service:
     name: '{{ openldap_slapd_service_name }}'
@@ -106,7 +99,21 @@
 
 - name: wait for port
   wait_for:
-    port: 389
+    port: "{{ item }}"
+    timeout: 30
+  with_items: "{{openldap_slapd_ports}}"
+  register: result_port
+  ignore_errors: True
+
+- debug:
+    msg: "{{ result_port.results }}"
+
+- name: find active port
+  set_fact:
+    active_port: "{{ result_port.results | selectattr('failed', 'equalto', False) | map(attribute='item') | list | first }}"
+
+- debug:
+    msg: "{{ active_port }}"
 
 - name: add memberof overlay
   ldap_attr:
@@ -120,15 +127,15 @@
   - { name: "olcModuleLoad", ldap_values: "{3}pw-sha2", state: present }
   tags: rtcconfig
 
-#- name: config global settings
-#  ldap_attr:
-#    dn: "cn=config"
-#    name: "{{item.name}}"
-#    values: "{{item.ldap_values}}"
-#    state: "{{ item.state }}"
-#  with_items:
-#    - { name: olcPasswordHash, ldap_values: ["{SSHA512}", "{SHA512}"], state: exact }
-#  tags: rtcconfig
+- name: config global settings
+  ldap_attr:
+    dn: "olcDatabase={-1}frontend,cn=config"
+    name: "{{item.name}}"
+    values: "{{item.ldap_values}}"
+    state: "{{ item.state }}"
+  with_items:
+    - { name: olcPasswordHash, ldap_values: ["{SSHA}"], state: exact }
+  tags: rtcconfig
 
 - name: modify config database
   ldap_attr:

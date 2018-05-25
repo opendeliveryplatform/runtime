@@ -10,8 +10,10 @@ else
         # apt-get update
         # apt-get install -y ansible
         apt-get update
+	echo "installing python pip"
         apt-get install -y python-pip
-        pip install --upgrade pip
+	echo "installing ansible"
         pip install ansible
+	echo "installing ansible-hashivault"
         pip install ansible-modules-hashivault
 fi
