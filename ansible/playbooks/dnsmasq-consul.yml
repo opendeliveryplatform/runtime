@@ -6,18 +6,69 @@
     dnsmasq_consul_host: 127.0.0.1
     dnsmasq_consul_port: 8600
     dnsmasq_consul_rev_servers: []
+    dnsmasq_upstream_nameservers:
+    - '8.8.8.8'
+    - '8.8.4.4'
   tasks:
+  - name: ensure systemd-resolved is not started
+    block:
+      - name: do not start systemd-resolved on port 53
+        lineinfile:
+          path: /etc/systemd/resolved.conf
+          regexp: "{{item.regexp}}"
+          line: "{{item.line}}"
+        with_items:
+        - { regexp: '^DNS=', line: 'DNS=127.0.1.1'}
+        - { regexp: '^FallbackDNS=', line: 'FallbackDNS=127.0.1.1'}
+      - name: restart systemd-resolved
+        service:
+          name: systemd-resolved
+          state: restarted
+
   - name: "ensure dnsmasq is installed"
     package:
       name: "dnsmasq"
       state: present
+
   - name: "copy config for consul dns resolution"
     template:
       src: "10-consul.j2"
       dest: "/etc/dnsmasq.d/10-consul"
     notify: restart dnsmasq
+
+  - name: insert nameservers
+    lineinfile:
+      path: /etc/resolv.dnsmasq.conf
+      line: "nameserver {{ item }}"
+      create: True
+    with_items: "{{ dnsmasq_upstream_nameservers }}"
+
+  - name: modify dnsmasq.conf
+    lineinfile:
+      path: /etc/dnsmasq.conf
+      regexp: "{{ item.regexp }}"
+      insertafter: "{{ item.insertafter }}"
+      line: "{{ item.line }}"
+    with_items:
+    - { regexp: '^resolv-file=', insertafter: "#resolv-file", line: 'resolv-file=/etc/resolv.dnsmasq.conf'}
+    - { regexp: '^bind-interfaces', insertafter: "#bind-interfaces", line: 'bind-interfaces'}
+    notify: restart dnsmasq
+
+  - name: modify dnsmasq.conf (2)
+    blockinfile:
+      insertafter: "#listen-address"
+      block: |
+        listen-address=127.0.1.1
+        listen-address={{ansible_host}}
+      path: /etc/dnsmasq.conf
+
+  - name: start dnsmasq
+    service:
+      name: dnsmasq
+      state: started
+
   handlers:
-  - name: "restart dnsmasq"
+  - name: restart dnsmasq
     service:
       name: dnsmasq
       state: restarted

@@ -1,0 +1,141 @@
+---
+#
+# This playbook installs keycloak as a docker container using the official image.
+# The official image does not provide TLS support
+# Therefore, we decicded to use nginx-proxy (instead of extending the image)
+# keycloak itself is only accessible from the host (no ports exposed externally)
+# the nginx proxy and keycloak are located on a "private" internal network and
+# can therefore see each other
+#
+- hosts: postgresql-master
+  tasks:
+  - name: adding psycopg2
+    pip:
+      name: psycopg2
+    become: True
+  - name: create keycloak db
+    postgresql_db:
+      name: keycloak
+      encoding: UTF-8
+      login_user: "postgres"
+      login_host: "127.0.0.1"
+    become: True
+  - name: create keycloak user
+    postgresql_user:
+      name: keycloak
+      password: keycloak
+      encrypted: True
+      db: keycloak
+      priv: ALL
+      login_user: "postgres"
+      login_host: "127.0.0.1"
+    become: True
+  tags: postgres
+
+- hosts: keycloak-servers
+  vars:
+    keycloak_tls_src_dir: /home/vagrant/pki
+    keycloak_tls_truststore: truststore.jks
+    keycloak_recreate: False
+    keycloak_realm: opendp-realm.json
+  tasks:
+  # TODO see angstwad. Need to decide if we check pre-requisites here, then we need some logic
+  - name: ensure docker-py is installed
+    pip:
+      name: "{{item}}"
+    with_items:
+    - docker
+    - python-consul
+    become: True
+
+  - name: create internal network
+    docker_network:
+      name: keycloak
+    become: True
+
+  - name: create directory
+    file:
+      path: /etc/keycloak
+      mode: 0755
+      state: directory
+    become: True
+
+  - name: copy truststore
+    copy:
+      src: "{{keycloak_tls_src_dir}}/{{keycloak_tls_truststore}}"
+      dest: /etc/keycloak/truststore.jks
+    become: True
+
+  - name: copy realm
+    copy:
+      src: opendp-realm.json
+      dest: /etc/keycloak/opendp-realm.json
+    become: True
+
+  - name: keycloak container
+    docker_container:
+      name: keycloak
+      image: rattermeyer/keycloak-truststore:latest
+      # As soon as we have a configuration available, we will import it here
+      command: ["-b", "0.0.0.0", "-Dkeycloak.import=/opt/jboss/keycloak/{{ keycloak_realm }}"]
+      networks:
+      - name: keycloak
+      purge_networks: True
+      volumes:
+      - "/etc/keycloak/truststore.jks:/etc/keycloak/truststore.jks"
+      - "/etc/keycloak/opendp-realm.json:/opt/jboss/keycloak/opendp-realm.json"
+      dns_servers:
+      - 192.168.56.21
+      - 192.168.56.22
+      - 192.168.56.23
+      env:
+        KEYCLOAK_USER: "{{keycloak_user}}"
+        KEYCLOAK_PASSWORD: "{{keycloak_password}}"
+        KEYCLOAK_LOGLEVEL: "{{keycloak_loglevel}}"
+        KEYCLOAK_IMPORT_REALM: "{{ keycloak_realm }}"
+        TRUSTSTORE_DISABLED: false
+        TRUSTSTORE: /etc/keycloak/truststore.jks
+        VIRTUAL_HOST: keycloak.service.consul
+        PROXY_ADDRESS_FORWARDING: "true"
+      recreate: "{{keycloak_recreate}}"
+      restart_policy: always
+    become: True
+
+  - name: create path
+    file:
+      path: "{{keycloak_certs_dest_fullpath}}"
+      state: directory
+    become: True
+
+  - name: copy key material to keycloak server
+    copy:
+      src: "/home/vagrant/pki/{{item.src}}"
+      dest: "{{keycloak_certs_dest_fullpath}}/{{item.dest|default(item.src)}}"
+      mode: "{{item.mode|default('644')}}"
+    become: True
+    with_items:
+      - {src: "keycloak.service.consul.pem", dest: "keycloak.service.consul.crt"}
+      - {src: "keycloak.service.consul-key.pem", dest: "keycloak.service.consul.key", mode: "0600"}
+      - {src: "ca.pem", dest: "ca.crt"}
+
+  - name: nginx-proxy
+    docker_container:
+      name: keycloak-proxy
+      image: jwilder/nginx-proxy
+      ports:
+      - "8080:80"
+      - "443:443"
+      volumes:
+      - "{{keycloak_certs_dest_fullpath}}:/etc/nginx/certs:ro"
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      networks:
+      - name: keycloak
+      recreate: "{{keycloak_recreate}}"
+      restart_policy: always
+    become: True
+
+  - name: register keycloak
+    consul:
+      service_name: keycloak
+      service_port: 8443
+    become: True

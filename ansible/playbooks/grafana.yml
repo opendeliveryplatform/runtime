@@ -1,26 +1,51 @@
 - hosts: grafana-servers
   gather_facts: False
+  vars:
+    cert_src_dir: /home/vagrant/pki
+    cert_dest_dir: /etc/grafana/certs
+    ca_cert_file: ca.pem
+    keycloak_cert_file: keycloak.service.consul.pem
+    grafana_user_id: 472  # as exepected by grafana container
+    grafana_user: grafana
   become: True
   tasks:
   - name: Create Grafana user
     user:
-      name: grafana
+      name: "{{grafana_user}}"
       shell: /usr/sbin/nologin
       state: present
+      uid: "{{grafana_user_id}}"
   - name: "create config dir"
     file:
       path: "/etc/grafana"
       state: directory
-      mode: "0700"
+      mode: "0755"
+      owner: "{{grafana_user}}"
+  - name: "create certs dir"
+    file:
+      path: "/etc/grafana/certs"
+      state: directory
+      mode: "0755"
+      owner: "{{grafana_user}}"
+  - name: copy ca cert
+    copy:
+      src: "{{ item.src }}"
+      dest: "{{ item.dest }}"
+      owner: "{{ grafana_user }}"
+    with_items:
+    - { src: "{{ cert_src_dir }}/{{ ca_cert_file}}", dest: "{{ cert_dest_dir }}/{{ ca_cert_file }}"}
+    - { src: "{{ cert_src_dir }}/{{ keycloak_cert_file}}", dest: "{{ cert_dest_dir }}/{{ keycloak_cert_file }}"}
   - name: "create sqllite dir"
     file:
       path: "/var/lib/grafana"
       state: directory
       mode: "0700"
+      owner: "{{ grafana_user }}"
   - name: "Create Grafana config"
     template:
       src: grafana.ini.j2
       dest: /etc/grafana/grafana.ini
+      owner: "{{ grafana_user }}"
   - name: Start Grafana Container
     docker_container:
       name: grafana
@@ -30,9 +55,10 @@
       volumes:
       - "/var/lib/grafana:/var/lib/grafana"
       - "/etc/grafana:/etc/grafana"
+      - "{{ cert_dest_dir }}:/etc/ssl/certs"
       env:
         GF_SECURITY_ADMIN_PASSWORD: secret
-      restart_policy: unless-stopped
+      restart_policy: always
       restart: True
   - name: register grafana
     consul:

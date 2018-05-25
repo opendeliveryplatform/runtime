@@ -1,8 +1,13 @@
----
 - hosts: vault_servers
   become: True
+  environment:
+    # these should be taken out of inventory
+    VAULT_ADDR: https://192.168.56.21:8200
+    VAULT_CAPATH: /etc/vault/ssl
+    VAULT_CACERT: "/etc/vault/ssl/ca.pem"
   roles:
   - role: rattermeyer.vault
+    vault_version: "0.10.1"
     vault_primary_node: server1.node.dc1.consul
     vault_iface: enp0s8
     vault_config_consul_address: "127.0.0.1:8543"
@@ -23,3 +28,4 @@
     vault_cluster_name: vault_cluster
     vault_config_listener_cluster_address: server1.node.dc1.consul
     vault_scheme: "https"
+ 
