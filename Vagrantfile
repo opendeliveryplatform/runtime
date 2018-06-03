@@ -52,7 +52,9 @@ Vagrant.configure(2) do |config|
     vm_config.vm.hostname = "controller"
     vm_config.vm.synced_folder ".", "/vagrant"
     vm_config.vm.synced_folder "./.vagrant", "/vagrant/.vagrant", mount_options: ["dmode=700,fmode=600"]
-    vm_config.vm.synced_folder "~/ansible/roles", "/etc/ansible/roles"
+    if File.directory?("~/ansible/roles")
+      vm_config.vm.synced_folder "~/ansible/roles", "/etc/ansible/roles"
+    end
     vm_config.vm.network :private_network, ip: "192.168.56.10"
     vm_config.vm.provider :virtualbox do |vb|
       vb.name = "controller"

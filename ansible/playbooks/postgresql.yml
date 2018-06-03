@@ -47,12 +47,3 @@
       - "{{ postgresql_data_directory }}:/var/lib/postgresql/data"
     become: True
   
-  - name: enable postgres secrets backend
-    hashivault_secret_enable:
-      name: "database/1"
-      backend: "database"
-      url: https://192.168.56.21:8200
-      ca_cert: "/etc/vault/ssl/ca.pem"
-      token: "70e43a1d-227d-3932-219a-e0f0260910ac"
-    tags:
-    - vault
