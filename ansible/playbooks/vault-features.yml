@@ -1,13 +1,13 @@
 ---
-- hosts: vault_servers
+- hosts: vault_master
   tasks:
   - name: ensure pip is installed
     package:
-        name: python-pip
+        name: python3-pip
+    become: True
   - name: install hvac
     pip:
         name: hvac
-  
   
   - name: get vault status
     hashivault_status:
@@ -25,23 +25,66 @@
     - name: "get client token"
       set_fact:
         tmp_data: "{{lookup('file', '/etc/vault/keys.json')| from_json}}"
+      tags: vault_status
     - name: "extract client token"
       set_fact:
         client_token: "{{tmp_data.root_token}}"
+      tags: vault_status
     - hashivault_secret_list:
         url: https://192.168.56.21:8200
         ca_cert: "/etc/vault/ssl/ca.pem"
         token: "{{client_token}}"
       register: 'hashivault_secret_list'
       tags: secret_list
-    - name: enable postgres secrets backend
+
+    - name: enable database secrets backend
       hashivault_secret_enable:
-        name: "database/odp"
+        name: "database"
         backend: "database"
         url: https://192.168.56.21:8200
         ca_cert: "/etc/vault/ssl/ca.pem"
         token: "{{client_token}}"
-      tags:
-      - vault
+
+    - name: config odp database connection
+      hashivault_write:
+        url: https://192.168.56.21:8200
+        ca_cert: "/etc/vault/ssl/ca.pem"
+        token: "{{client_token}}"
+        secret: '/database/config/odp'
+        data:
+          plugin_name: 'postgresql-database-plugin'
+          allowed_roles: 'readonly'
+          connection_url: "postgresql://{{'{{username}}'}}:{{'{{password}}'}}@192.168.56.21:5432/?sslmode=disable"
+          username: 'postgres'
+          password: 'post1234gres'
+      tags: config_db_con
+       
+        #    - name: config odp database connection
+        #      uri:
+        #        url: 'https://192.168.56.21:8200/v1/database/config/odp'
+        #        method: POST
+        #        validate_certs: FALSE
+        #        timeout: null
+        #        headers:
+        #          X-VAULT-TOKEN: "{{client_token}}"
+        #        body_format: json
+        #        body:
+        #          plugin_name: 'postgresql-database-plugin'
+        #          allowed_roles: 'readonly'
+        #          connection_url: "postgresql://{{'{{username}}'}}:{{'{{password}}'}}@192.168.56.21:5432/?sslmode=disable"
+        #          username: 'postgres'
+        #          password: 'post1234gres'
+       
+    - name: config database role
+      hashivault_write:
+        url: https://192.168.56.21:8200
+        ca_cert: "/etc/vault/ssl/ca.pem"
+        token: "{{client_token}}"
+        secret: '/database/roles/readonly'
+        data:
+          db_name: 'odp'
+          creation_statement: "CREATE ROLE {{'{{name}}}'}} WITH LOGIN PASSWORD {{'{{password}}'}} VALID UNTIL {{'{{expiration}}'}}; GRANT SELECT ON ALL TABLES IN SCHEMA public TO {{'{{name}}'}};"
+          default_ttl: '1h'
+          max_ttl: '24h'
     when: vault_status.status.sealed == False
     run_once: True

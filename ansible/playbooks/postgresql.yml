@@ -45,5 +45,8 @@
       volumes:
       - "/etc/passwd:/etc/passwd:ro"
       - "{{ postgresql_data_directory }}:/var/lib/postgresql/data"
+      env:
+        POSTGRES_USER: 'postgres'
+        POSTGRES_PASSWORD: 'post123gres'
     become: True
   
