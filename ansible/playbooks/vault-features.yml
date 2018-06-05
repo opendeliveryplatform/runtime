@@ -37,6 +37,55 @@
       register: 'hashivault_secret_list'
       tags: secret_list
 
+    - name: create vault policy 'visitor'
+      hashivault_policy_set:
+        url: https://192.168.56.21:8200
+        ca_cert: "/etc/vault/ssl/ca.pem"
+        token: "{{client_token}}"
+        name: visitor
+        rules: >
+          path "database/roles/readonly" {
+            capabilities = ["read"]
+          }
+          path "database/creds/readonly" {
+            capabilities = ["read"]
+          }
+
+    - name: enable ldap auth backend
+      hashivault_auth_enable:
+        name: "ldap"
+        url: https://192.168.56.21:8200
+        ca_cert: "/etc/vault/ssl/ca.pem"
+        token: "{{client_token}}"
+
+    - name: config ldap auth backend
+      hashivault_write:
+        url: https://192.168.56.21:8200
+        ca_cert: "/etc/vault/ssl/ca.pem"
+        token: "{{client_token}}"
+        secret: '/auth/ldap/config'
+        data:
+          url: "ldaps://192.168.56.22:636"
+          insecure_tls: True
+          userattr: "uid"
+          userdn: "ou=users,dc=opendp,dc=org"
+          groupdn: "ou=groups,dc=opendp,dc=org"
+          groupattr: "cn"
+          groupfilter: "(&(objectclass=groupOfNames)(member={{'{{.UserDN}}'}}))"
+          binddn: "cn=admin,dc=opendp,dc=org"
+          bindpass: "secret"
+      tags: config_db_con
+
+    - name: config ldap group mappings
+      hashivault_write:
+        url: https://192.168.56.21:8200
+        ca_cert: "/etc/vault/ssl/ca.pem"
+        token: "{{client_token}}"
+        secret: '/auth/ldap/groups/visitors'
+        data:
+          policies: ["visitor"]
+      tags: config_db_con
+
     - name: enable database secrets backend
       hashivault_secret_enable:
         name: "database"
@@ -83,7 +132,7 @@
         secret: '/database/roles/readonly'
         data:
           db_name: 'odp'
-          creation_statement: "CREATE ROLE {{'{{name}}}'}} WITH LOGIN PASSWORD {{'{{password}}'}} VALID UNTIL {{'{{expiration}}'}}; GRANT SELECT ON ALL TABLES IN SCHEMA public TO {{'{{name}}'}};"
+          creation_statements: "CREATE ROLE \"{{'{{name}}'}}\" WITH LOGIN PASSWORD '{{'{{password}}'}}' VALID UNTIL '{{'{{expiration}}'}}'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{'{{name}}'}}\";"
           default_ttl: '1h'
           max_ttl: '24h'
     when: vault_status.status.sealed == False

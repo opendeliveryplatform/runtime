@@ -93,6 +93,17 @@
         }
       }
     - { 
+        dn: "uid=victor,ou=users,dc=opendp,dc=org",
+        objectclass: ["inetOrgPerson", "organizationalPerson", "person", "top"],
+        attributes: {
+          uid: victor,
+          cn: "victor visitor",
+          sn: "visitor", 
+          mail: "victor.visitor@opendp.local",
+          userPassword: "{SSHA}TPs96o80TKjTYSbGP0Mn29U6XgGLbda/" # nick
+        }
+      }
+    - { 
         dn: "cn=developers,ou=groups,dc=opendp,dc=org",
         objectclass: ["groupOfNames"],
         attributes: {
@@ -106,6 +117,22 @@
         attributes: {
           cn: cdengineers,
           member: "uid=nick,ou=users,dc=opendp,dc=org"
+        }
+      }
+    - { 
+        dn: "cn=dbadmins,ou=groups,dc=opendp,dc=org",
+        objectclass: ["groupOfNames"],
+        attributes: {
+          cn: dbadmins,
+          member: "uid=alice,ou=users,dc=opendp,dc=org"
+        }
+      }
+    - { 
+        dn: "cn=visitors,ou=groups,dc=opendp,dc=org",
+        objectclass: ["groupOfNames"],
+        attributes: {
+          cn: visitors,
+          member: "uid=victor,ou=users,dc=opendp,dc=org"
         }
       }
     tags: post_task
