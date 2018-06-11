@@ -3,15 +3,16 @@
   tasks:
   - name: ensure pip is installed
     package:
-        name: python3-pip
+        name: python-pip
     become: True
   - name: install hvac
     pip:
         name: hvac
+    become: True
   
   - name: get vault status
     hashivault_status:
-      url: https://192.168.56.21:8200
+      url: https://active.vault.service.consul:8200
       ca_cert: "/etc/vault/ssl/ca.pem"
     register: 'vault_status'
     tags: vault_status
@@ -31,36 +32,26 @@
         client_token: "{{tmp_data.root_token}}"
       tags: vault_status
     - hashivault_secret_list:
-        url: https://192.168.56.21:8200
+        url: https://active.vault.service.consul:8200
         ca_cert: "/etc/vault/ssl/ca.pem"
         token: "{{client_token}}"
       register: 'hashivault_secret_list'
       tags: secret_list
-
-    - name: create vault policy 'visitor'
-      hashivault_policy_set:
-        url: https://192.168.56.21:8200
-        ca_cert: "/etc/vault/ssl/ca.pem"
-        token: "{{client_token}}"
-        name: visitor
-        rules: >
-          path "database/roles/readonly" {
-            capabilities = ["read"]
-          }
-          path "database/creds/readonly" {
-            capabilities = ["read"]
-          }
+    
+    - name: setup vault policies
+      import_tasks: vault-policies.yml
+      tags: policies
 
     - name: enable ldap auth backend
       hashivault_auth_enable:
         name: "ldap"
-        url: https://192.168.56.21:8200
+        url: https://active.vault.service.consul:8200
         ca_cert: "/etc/vault/ssl/ca.pem"
         token: "{{client_token}}"
 
     - name: config ldap auth backend
       hashivault_write:
-        url: https://192.168.56.21:8200
+        url: https://active.vault.service.consul:8200
         ca_cert: "/etc/vault/ssl/ca.pem"
         token: "{{client_token}}"
         secret: '/auth/ldap/config'
@@ -78,7 +69,7 @@
 
     - name: config ldap group mappings
       hashivault_write:
-        url: https://192.168.56.21:8200
+        url: https://active.vault.service.consul:8200
         ca_cert: "/etc/vault/ssl/ca.pem"
         token: "{{client_token}}"
         secret: '/auth/ldap/groups/visitors'
@@ -86,17 +77,27 @@
           policies: ["visitor"]
       tags: config_db_con
 
+    - name: config ldap group mappings for cluster-admins
+      hashivault_write:
+        url: https://active.vault.service.consul:8200
+        ca_cert: "/etc/vault/ssl/ca.pem"
+        token: "{{client_token}}"
+        secret: '/auth/ldap/groups/cluster-admins'
+        data:
+          policies: ["vault-admin"]
+      tags: config_db_con
+
     - name: enable database secrets backend
       hashivault_secret_enable:
         name: "database"
         backend: "database"
-        url: https://192.168.56.21:8200
+        url: https://active.vault.service.consul:8200
         ca_cert: "/etc/vault/ssl/ca.pem"
         token: "{{client_token}}"
 
     - name: config odp database connection
       hashivault_write:
-        url: https://192.168.56.21:8200
+        url: https://active.vault.service.consul:8200
         ca_cert: "/etc/vault/ssl/ca.pem"
         token: "{{client_token}}"
         secret: '/database/config/odp'
@@ -108,32 +109,16 @@
           password: 'post1234gres'
       tags: config_db_con
        
-        #    - name: config odp database connection
-        #      uri:
-        #        url: 'https://192.168.56.21:8200/v1/database/config/odp'
-        #        method: POST
-        #        validate_certs: FALSE
-        #        timeout: null
-        #        headers:
-        #          X-VAULT-TOKEN: "{{client_token}}"
-        #        body_format: json
-        #        body:
-        #          plugin_name: 'postgresql-database-plugin'
-        #          allowed_roles: 'readonly'
-        #          connection_url: "postgresql://{{'{{username}}'}}:{{'{{password}}'}}@192.168.56.21:5432/?sslmode=disable"
-        #          username: 'postgres'
-        #          password: 'post1234gres'
-       
     - name: config database role
       hashivault_write:
-        url: https://192.168.56.21:8200
+        url: https://active.vault.service.consul:8200
         ca_cert: "/etc/vault/ssl/ca.pem"
         token: "{{client_token}}"
         secret: '/database/roles/readonly'
         data:
           db_name: 'odp'
           creation_statements: "CREATE ROLE \"{{'{{name}}'}}\" WITH LOGIN PASSWORD '{{'{{password}}'}}' VALID UNTIL '{{'{{expiration}}'}}'; GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{'{{name}}'}}\";"
-          default_ttl: '1h'
+          default_ttl: '3m'
           max_ttl: '24h'
     when: vault_status.status.sealed == False
     run_once: True

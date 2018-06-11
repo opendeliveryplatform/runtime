@@ -75,7 +75,7 @@
   - name: "set nomad server policy"
     hashivault_policy_set:
       ca_cert: "{{vault_tls_ca_crt}}"
-      name: nomad_server
+      name: nomad-server
       rules: "{{ lookup('file', 'nomad-server-policy.hcl')}}"
       token: "{{vault_init.root_token}}"
     register: vault_policy_set
@@ -126,7 +126,7 @@
       ca_cert: "{{vault_tls_ca_crt}}"
       display_name: "nomad"
       policies:
-      - nomad_server
+      - nomad-server
       renewable: True
       ttl: "72h"
       orphan: True
@@ -144,4 +144,4 @@
       dest: "/etc/vault/nomad_token.json"
     when: vault_nomad_token is changed
 
-  - include_tasks: vault-features.yml
+- import_playbook: vault-features.yml

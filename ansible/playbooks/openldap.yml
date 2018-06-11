@@ -93,6 +93,17 @@
         }
       }
     - { 
+        dn: "uid=gandalf,ou=users,dc=opendp,dc=org",
+        objectclass: ["inetOrgPerson", "organizationalPerson", "person", "top"],
+        attributes: {
+          uid: gandalf,
+          cn: "gandalf white",
+          sn: "white", 
+          mail: "gandalf.white@opendp.local",
+          userPassword: "{SSHA}N38uSoaeuhc9NsGHwjy/GGU8NXgr9qTR" # gandalf
+        }
+      }
+    - { 
         dn: "uid=victor,ou=users,dc=opendp,dc=org",
         objectclass: ["inetOrgPerson", "organizationalPerson", "person", "top"],
         attributes: {
@@ -133,6 +144,14 @@
         attributes: {
           cn: visitors,
           member: "uid=victor,ou=users,dc=opendp,dc=org"
+        }
+      }
+    - { 
+        dn: "cn=cluster-admins,ou=groups,dc=opendp,dc=org",
+        objectclass: ["groupOfNames"],
+        attributes: {
+          cn: visitors,
+          member: "uid=gandalf,ou=users,dc=opendp,dc=org"
         }
       }
     tags: post_task

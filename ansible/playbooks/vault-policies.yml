@@ -1,0 +1,91 @@
+- name: create vault policy 'visitor'
+  hashivault_policy_set:
+    url: https://active.vault.service.consul:8200
+    ca_cert: "/etc/vault/ssl/ca.pem"
+    token: "{{client_token}}"
+    name: visitor
+    rules: >
+      path "database/roles/readonly" {
+        capabilities = ["read"]
+      }
+      path "database/creds/readonly" {
+        capabilities = ["read"]
+      }
+
+- name: create vault policy 'vault-admin'
+  hashivault_policy_set:
+    url: https://active.vault.service.consul:8200
+    ca_cert: "/etc/vault/ssl/ca.pem"
+    token: "{{client_token}}"
+    name: vault-admin
+    rules: >
+      path "auth/*"
+      {
+        capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+      }
+      
+      path "sys/auth/*"
+      {
+        capabilities = ["create", "read", "update", "delete", "sudo"]
+      }
+      
+      path "sys/policy"
+      {
+        capabilities = ["read"]
+      }
+      
+      path "sys/policy/*"
+      {
+        capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+      }
+      
+      path "secret/*"
+      {
+        capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+      }
+      
+      path "sys/mounts/*"
+      {
+        capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+      }
+      
+      path "sys/health"
+      {
+        capabilities = ["read", "sudo"]
+      }
+
+
+
+- name: create vault policy 'vault-provisioner'
+  hashivault_policy_set:
+    url: https://active.vault.service.consul:8200
+    ca_cert: "/etc/vault/ssl/ca.pem"
+    token: "{{client_token}}"
+    name: vault-provisioner
+    rules: >
+      path "auth/*"
+      {
+        capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+      }
+      
+      path "sys/auth/*"
+      {
+        capabilities = ["create", "read", "update", "delete", "sudo"]
+      }
+      
+      path "sys/policy"
+      {
+        capabilities = ["read"]
+      }
+      
+      path "sys/policy/*"
+      {
+        capabilities = ["create", "read", "update", "delete", "list"]
+      }
+      
+      path "secret/*"
+      {
+        capabilities = ["create", "read", "update", "delete", "list"]
+      }
+
+
